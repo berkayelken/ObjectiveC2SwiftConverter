@@ -1,10 +1,10 @@
-package io.github.berkayelken.objectivec.converter;
+package io.github.berkayelken.objectivec.parser;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class MsObjectivecConverterApplicationTests
+class MsObjectivecParserApplicationTests
 {
 
 	@Test
