@@ -1,0 +1,25 @@
+package io.github.berkayelken.common.model.execution.mutating;
+
+public enum MutatingOperator {
+	MINUS,
+	PLUS,
+	PRODUCT,
+	DIVIDE,
+	OR,
+	AND,
+	CONDITIONAL_OR,
+	CONDITIONAL_AND,
+	GREATER,
+	LESS,
+	EQUAL,
+	GREATER_OR_EQUAL,
+	LESS_OR_EQUAL,
+	SHIFT_RIGHT,
+	SHIFT_LEFT,
+	QUESTION_MARK,
+	DOUBLE_DOT,
+	TRIPLE_DOT,
+	OPENING_PARENTHESIS,
+	CLOSING_PARENTHESIS,
+	SEMICOLON;
+}

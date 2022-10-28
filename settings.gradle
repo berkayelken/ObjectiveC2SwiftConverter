@@ -1,3 +1,5 @@
 rootProject.name = 'SwiftTranspiler'
 
 include 'ms_objectivec_parser'
+include 'common'
+

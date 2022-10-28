@@ -1,0 +1,958 @@
+//
+//  AlertManager.m
+//  VodafoneMCare
+//
+//  Created by Umut Sefer on 27/02/2017.
+//  Copyright © 2017 Loodos. All rights reserved.
+//
+
+#import "AlertManager.h"
+
+@interface AlertManager ()
+
+//Sayfa üzerine eklenen Alertleri tutar, böylece üst üste alert çıktığında eskileri kaybetmeyiz.
+@property (nonatomic, strong) NSMutableArray *arrayAlertQueue;
+
+@end
+
+@implementation AlertManager : Abc, Dfe, Ghd
+
+#pragma mark - Singleton Method
+
++(AlertManager *)sharedManager
+{
+    static AlertManager *manager = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        manager = [[super allocWithZone:NULL] init];
+    });
+    return manager;
+}
+
++(id)allocWithZone:(struct _NSZone *)zone
+{
+    return [self sharedManager];
+}
+
+-(id)copy
+{
+    return [self.class sharedManager];
+}
+
+- (id)init
+{
+    self = [super init];
+    if (self) {
+        _arrayAlertQueue = [[NSMutableArray alloc]init];
+        _remainingSecondsForOtp = 0;
+    }
+    return self;
+}
+
+#pragma mark - Inner Methods
+-(void)hideAndRemoveLastAlert:(BOOL)willRemove animated:(BOOL)animated
+{
+    if ([_arrayAlertQueue count] > 0)
+    {
+        AlertView *alertView = [_arrayAlertQueue lastObject];
+        if (willRemove)
+        {
+            [alertView dismissAnimated:animated];
+            [_arrayAlertQueue removeLastObject];
+        }
+        else
+            [alertView hideAnimated:animated];
+    }
+}
+-(void)hideAndRemoveLastAlert:(BOOL)willRemove
+{
+    [self hideAndRemoveLastAlert:willRemove animated:YES];
+}
+
+-(void)showLastSavedAlertInQueueIfExist
+{
+    if ([_arrayAlertQueue count] > 0)
+    {
+        AlertView *alertView = [_arrayAlertQueue lastObject];
+        if ([alertView.presenterVC isEqual:[RedirectManager shared].navigationController.topViewController]) {
+
+            [alertView show];
+        }
+        else
+            [self hideAndRemoveLastAlert:YES];
+    }
+}
+
+-(void)addtoQueue:(AlertView*)alertView
+{
+    if (alertView && ! [_arrayAlertQueue containsObject:alertView])
+        [_arrayAlertQueue addObject:alertView];
+}
+
+- (void)showAlertForSwiftWithTitle:(NSString *)title message:(NSString *)message hideBlock:(HideBlock)hideBlock
+            cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock
+            cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts
+{
+    [self showAlertWithTitle:title
+                     message:message
+                   hideBlock:hideBlock
+                 cancelBlock:cancelBlock
+                confirmBlock:confirmBlock
+                  cancelText:cancelText
+                  otherTexts:otherTexts, nil];
+}
+- (void)showAlertForSwiftWithTitle:(NSString *)title message:(NSString *)message type:(AlertType)type hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherText:(NSString *)otherText {
+
+    [self showAlertWithTitle:title message:message type:type hideBlock:hideBlock cancelBlock:cancelBlock confirmBlock:confirmBlock cancelText:cancelText otherTexts:otherText, nil];
+}
+
+#pragma mark - Outer Methods
+-(void)showAlertWithTitle:(NSString *)title message:(NSString *)message hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText confirmText:(NSString *)confirmText secondConfirmText:(NSString *)secondConfirmText{
+    [self hideAndRemoveLastAlert:NO];
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (confirmText != nil){
+        [arrayOtherTexts addObject:confirmText];
+
+    }
+    if (secondConfirmText != nil){
+        [arrayOtherTexts addObject:secondConfirmText];
+
+    }
+
+    AlertView *alertView = [AlertView alertWithTitle:title message:message cancelButtonTitle:cancelText otherButtonTitles:arrayOtherTexts];
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showAlertWithTitle:(NSString *)title message:(NSString *)message hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts, ...
+{
+    [self hideAndRemoveLastAlert:NO];
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil)
+    {
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*)))
+        {
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+    AlertView *alertView = [AlertView alertWithTitle:title message:message cancelButtonTitle:cancelText otherButtonTitles:arrayOtherTexts];
+
+    if ([title isEqualToString:LocalizedStr(kLS_BillPay)]) {
+      [alertView setBillImage];
+    }
+
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showWhiteAlertWithTitle:(NSString *)title message:(NSString *)message hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts, ...
+{
+    [self hideAndRemoveLastAlert:NO];
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil)
+    {
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*)))
+        {
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+    AlertView *alertView = [AlertView whiteAlertWithTitle:title message:message cancelButtonTitle:cancelText otherButtonTitles:arrayOtherTexts];
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showAlertWithCampaignCode:(NSString *)campaignCode campaignGenerationDate:(NSString *)campaignGenerationDate hideBlock:(HideBlock)hideBlock confirmBlock:(ConfirmBlock)confirmBlock
+{
+    [self hideAndRemoveLastAlert:NO];
+
+    AlertView *alertView = [AlertView alertForFixCampaign:campaignCode campaignGenerationDate:campaignGenerationDate];
+
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showCampaignAlertSwiftWithTitle:(NSString *)title alertIconImage:(UIImage *)alertIconImage campaignModel:(LoyaltyCampaignModel *)model alertIconDescription:(NSString *)alertIconDescription campaignCodeTitle:(NSString *)campaignCodeTitle campaignCode:(NSString *)campaignCode hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString*)cancelText confirmButtonTitle:(NSString *)confirmButtonTitle {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    LiveBarcodeView *alertView = [LiveBarcodeView alertCampaignOverlayWithTitle:title alertIconImage:alertIconImage campaignModel:model alertIconDescription:alertIconDescription campaignCodeTitle:campaignCodeTitle campaignCode:campaignCode  cancelText:cancelText confirmButtonTitle:confirmButtonTitle];
+
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showCampaignAlertWithTitle:(NSString *)title alertIconImage:(UIImage *)alertIconImage campaignModel:(LoyaltyCampaignModel *)model alertIconDescription:(NSString *)alertIconDescription campaignCodeTitle:(NSString *)campaignCodeTitle campaignCode:(NSString *)campaignCode hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString*)cancelText confirmButtonTitle:(NSString *)confirmButtonTitle, ...
+{
+    [self hideAndRemoveLastAlert:NO];
+    LiveBarcodeView *alertView = [LiveBarcodeView alertCampaignOverlayWithTitle:title alertIconImage:alertIconImage campaignModel:model alertIconDescription:alertIconDescription campaignCodeTitle:campaignCodeTitle campaignCode:campaignCode  cancelText:cancelText confirmButtonTitle:confirmButtonTitle];
+
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showAlertWithTitle:(NSString *)title message:(NSString *)message type:(AlertType)type hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts, ...
+{
+    [self hideAndRemoveLastAlert:NO];
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil)
+    {
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*)))
+        {
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+    AlertView *alertView = [AlertView alertWithTitle:title message:message type:type cancelButtonTitle:cancelText otherButtonTitles:arrayOtherTexts ];
+    [alertView setHideBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        if (hideBlock)
+            hideBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+-(void)showAlertWithMessage:(NSString *)message hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts, ...
+{
+    [self showAlertWithTitle:@""
+                     message:message
+                   hideBlock:hideBlock
+                 cancelBlock:cancelBlock
+                confirmBlock:confirmBlock
+                  cancelText:cancelText
+                  otherTexts:otherTexts, nil];
+}
+
+-(void)showAlertForSwiftWithMessage:(NSString *)message hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts
+{
+    [self showAlertWithTitle:@""
+                     message:message
+                   hideBlock:hideBlock
+                 cancelBlock:cancelBlock
+                confirmBlock:confirmBlock
+                  cancelText:cancelText
+                  otherTexts:otherTexts, nil];
+}
+
+-(void)showWhiteAlertForSwiftWithMessage:(NSString *)message hideBlock:(HideBlock)hideBlock cancelBlock:(CancelBlock)cancelBlock confirmBlock:(ConfirmBlock)confirmBlock cancelText:(NSString *)cancelText otherTexts:(NSString *)otherTexts
+{
+    [self showWhiteAlertWithTitle:@""
+                     message:message
+                   hideBlock:hideBlock
+                 cancelBlock:cancelBlock
+                confirmBlock:confirmBlock
+                  cancelText:cancelText
+                  otherTexts:otherTexts, nil];
+}
+
+
+-(void)showAlertWithTitle:(NSString *)title
+                  message:(NSString *)message
+               cancelText:(NSString *)cancelText
+{
+        [self showAlertWithTitle:title
+                         message:message
+                       hideBlock:nil
+                     cancelBlock:nil
+                    confirmBlock:nil
+                      cancelText:cancelText
+                      otherTexts:nil];
+}
+
+- (void)showMasterpassPopupWithMessage:(NSString *)message
+                           cancelBlock:(CancelBlock)cancelBlock
+                          confirmBlock:(ConfirmBlock)confirmBlock
+                            cancelText:(NSString*)cancelText
+                            otherTexts:(NSString *)otherTexts,... {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil) {
+
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*))) {
+
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+
+    AlertView *alertView = [AlertView alertMasterPassWithTitle:LocalizedStr(kLS_MasterPassTitle)
+                                                       message:message
+                                                          type:AlertTypeMasterPass
+                                             cancelButtonTitle:cancelText
+                                             otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showMasterpassPopupWithMessageForSwift:(NSString *)message
+                                   cancelBlock:(CancelBlock)cancelBlock
+                                  confirmBlock:(ConfirmBlock)confirmBlock
+                                    cancelText:(NSString*)cancelText
+                                    otherTexts:(NSString *)otherTexts {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil) {
+        [arrayOtherTexts addObject:otherTexts];
+    }
+
+    AlertView *alertView = [AlertView alertMasterPassWithTitle:LocalizedStr(kLS_MasterPassTitle)
+                                                       message:message
+                                                          type:AlertTypeMasterPass
+                                             cancelButtonTitle:cancelText
+                                             otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmBlock:^(NSInteger buttonIndex) {
+        [self hideAndRemoveLastAlert:YES];
+        if (confirmBlock)
+            confirmBlock(buttonIndex);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showMasterpassPopupForSwiftWithMessage:(NSString *)message
+                                   cancelBlock:(CancelBlock)cancelBlock
+                                  confirmBlock:(ConfirmBlock)confirmBlock
+                                    cancelText:(NSString*)cancelText
+                                    otherTexts:(NSString *)otherTexts {
+
+    [self showMasterpassPopupWithMessage:message
+                             cancelBlock: cancelBlock
+                            confirmBlock:confirmBlock
+                              cancelText:cancelText
+                              otherTexts:otherTexts, nil];
+}
+
+- (void)showMasterpassTextfieldPopupWithMessage:(NSString *)message
+                                    cancelBlock:(CancelBlock)cancelBlock
+                                   confirmBlock:(ConfirmTextfieldBlock)confirmBlock
+                                otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                                     cancelText:(NSString*)cancelText
+                                     otherTexts:(NSString *)otherTexts,... {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil) {
+
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*))) {
+
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+
+    AlertView *alertView = [AlertView alertMasterPassWithTitle:LocalizedStr(kLS_MasterPassTitle)
+                                                       message:message
+                                                          type:AlertTypeMasterPassTextfield
+                                             cancelButtonTitle:cancelText
+                                             otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmTextfieldBlock:^(NSInteger buttonIndex, MDCTextField *textfield) {
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (confirmBlock)
+            confirmBlock(buttonIndex, textfield);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPRequestBlock:^{
+
+        if (otpRequestBlock)
+            otpRequestBlock();
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showMasterpassTextfieldPopupWithMessageForSwift:(NSString *)message
+                                    cancelBlock:(CancelBlock)cancelBlock
+                                   confirmBlock:(ConfirmTextfieldBlock)confirmBlock
+                                otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                                     cancelText:(NSString*)cancelText
+                                     otherTexts:(NSString *)otherText {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherText != nil) {
+        [arrayOtherTexts addObject:otherText];
+    }
+
+    AlertView *alertView = [AlertView alertMasterPassWithTitle:LocalizedStr(kLS_MasterPassTitle)
+                                                       message:message
+                                                          type:AlertTypeMasterPassTextfield
+                                             cancelButtonTitle:cancelText
+                                             otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setConfirmTextfieldBlock:^(NSInteger buttonIndex, MDCTextField *textfield) {
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (confirmBlock)
+            confirmBlock(buttonIndex, textfield);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPRequestBlock:^{
+
+        if (otpRequestBlock)
+            otpRequestBlock();
+    }];
+
+    _alertView = alertView;
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showMasterpassTextfieldPopupForSwiftWithMessage:(NSString *)message
+                                            cancelBlock:(CancelBlock)cancelBlock
+                                           confirmBlock:(ConfirmTextfieldBlock)confirmBlock
+                                        otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                                             cancelText:(NSString*)cancelText
+                                             otherTexts:(NSString *)otherTexts {
+
+    [self showMasterpassTextfieldPopupWithMessage:message
+                                      cancelBlock:cancelBlock
+                                     confirmBlock:confirmBlock otpRequestBlock:otpRequestBlock cancelText:cancelText
+                                       otherTexts:otherTexts, nil];
+
+}
+
+- (void)showOtpPopupWithTitle:(NSString *)title
+                      message:(NSString *)message
+                  cancelBlock:(CancelBlock)cancelBlock
+                 confirmBlock:(OTPTextBlock)confirmBlock
+              otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                   cancelText:(NSString*)cancelText
+                   otherTexts:(NSString *)otherTexts,... {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil) {
+
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*))) {
+
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+
+    AlertView *alertView = [AlertView alertOtpWithTitle:title
+                                                message:message
+                                                   type:AlertTypeOtpTextfield
+                                      cancelButtonTitle:cancelText
+                                      otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPTextBlock:^(NSInteger buttonIndex, NSString *text) {
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (confirmBlock)
+            confirmBlock(buttonIndex, text);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPRequestBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (otpRequestBlock)
+            otpRequestBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showOtpPopupWithTitle:(NSString *)title
+                      message:(NSString *)message
+                  cancelBlock:(CancelBlock)cancelBlock
+                 confirmBlock:(OTPTextBlock)confirmBlock
+              otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                   cancelText:(NSString*)cancelText
+                   otherText:(NSString *)otherText {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherText != nil) {
+        [arrayOtherTexts addObject:otherText];
+    }
+
+    AlertView *alertView = [AlertView alertOtpWithTitle:title
+                                                message:message
+                                                   type:AlertTypeOtpTextfield
+                                      cancelButtonTitle:cancelText
+                                      otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPTextBlock:^(NSInteger buttonIndex, NSString *text) {
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (confirmBlock)
+            confirmBlock(buttonIndex, text);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPRequestBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (otpRequestBlock)
+            otpRequestBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showOtpPopupWithTitle:(NSString *)title
+                      message:(NSString *)message
+               requiredLength:(NSInteger)requiredLength
+                  cancelBlock:(CancelBlock)cancelBlock
+                 confirmBlock:(OTPTextBlock)confirmBlock
+              otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                   cancelText:(NSString*)cancelText
+                   otherTexts:(NSString *)otherTexts,... NS_REQUIRES_NIL_TERMINATION {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    NSMutableArray *arrayOtherTexts = [NSMutableArray new];
+    if (otherTexts != nil) {
+
+        [arrayOtherTexts addObject:otherTexts];
+        va_list args;
+        va_start(args, otherTexts);
+        NSString *buttonTitle = nil;
+        while ((buttonTitle = va_arg(args, NSString*))) {
+
+            [arrayOtherTexts addObject:buttonTitle];
+        }
+        va_end(args);
+    }
+
+    AlertView *alertView = [AlertView alertOtpWithTitle:title
+                                                message:message
+                                                   type:AlertTypeOtpTextfield
+                                         requiredLength:requiredLength
+                                      cancelButtonTitle:cancelText
+                                      otherButtonTitles:arrayOtherTexts];
+
+    [alertView setCancelBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPTextBlock:^(NSInteger buttonIndex, NSString *text) {
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (confirmBlock)
+            confirmBlock(buttonIndex, text);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPRequestBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (otpRequestBlock)
+            otpRequestBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showOtpPopupWithTitle:(NSString *)title
+                      message:(NSString *)message
+                  timerPrefix:(NSString *)timerPrefix
+                 newCodeTitle:(NSString *)newCodeTitle
+                  cancelBlock:(CancelBlock)cancelBlock
+                 confirmBlock:(OTPTextBlock)confirmBlock
+              otpRequestBlock:(OTPRequestBlock)otpRequestBlock
+                   cancelText:(NSString *)cancelText
+                  confirmText:(NSString *)confirmText {
+
+    [self hideAndRemoveLastAlert:NO];
+
+    if (!title) {
+        title = @"";
+    }
+
+    if (!message) {
+        message = @"";
+    }
+
+    if (!timerPrefix) {
+        timerPrefix = @"";
+    }
+
+    if (!newCodeTitle) {
+        newCodeTitle = @"";
+    }
+
+    if (!cancelText) {
+        cancelText = @"";
+    }
+
+    if (!confirmText) {
+        confirmText = @"";
+    }
+
+    AlertView *alertView = [AlertView alertEShopOtpWithTitle:title
+                                                     message:message
+                                                 timerPrefix:timerPrefix
+                                                newCodeTitle:newCodeTitle
+                                                        type:AlertTypeEShopOTP
+                                           cancelButtonTitle:cancelText
+                                          confirmButtonTitle:confirmText];
+
+    [alertView setCancelBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (cancelBlock)
+            cancelBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPTextBlock:^(NSInteger buttonIndex, NSString *text) {
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (confirmBlock)
+            confirmBlock(buttonIndex, text);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+    [alertView setOTPRequestBlock:^{
+
+        [self hideAndRemoveLastAlert:YES];
+        [LoadingManager findAndRemoveLoading];
+        if (otpRequestBlock)
+            otpRequestBlock();
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self showLastSavedAlertInQueueIfExist];
+        });
+    }];
+
+    [alertView show];
+    [self addtoQueue:alertView];
+}
+
+- (void)showUnknownErrorAlert {
+
+    [[AlertManager sharedManager] showAlertWithTitle:LocalizedStr(kLS_Sorry)
+                                             message:LocalizedStr(kLS_UnknownErrorOccured)
+                                           hideBlock:^{
+        [[RedirectManager shared] popViewController];
+                                           }
+                                         cancelBlock:^{
+        [[RedirectManager shared] popViewController];
+                                         }
+                                        confirmBlock:^(NSInteger buttonIndex) {
+        [[RedirectManager shared] popViewController];
+                                        }
+                                          cancelText:nil
+                                          otherTexts:LocalizedStr(kLS_Ok), nil];
+}
+
+-(void)clearAlertQueue
+{
+    [self clearAlertQueueAnimated:NO];
+}
+
+- (void)clearAlertQueueAnimated:(BOOL)animated {
+
+    for (AlertView *alertView in _arrayAlertQueue)
+        [alertView dismissAnimated:animated];
+    [_arrayAlertQueue removeAllObjects];
+}
+
+@end
